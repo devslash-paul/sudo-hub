@@ -1,0 +1,29 @@
+[Unit]
+Description=Sudo Hub passkey-authorized root executor
+After=local-fs.target
+
+[Service]
+Type=simple
+Environment=PYTHONPATH=/opt/sudo-hub/src
+EnvironmentFile=/etc/sudo-hub/sudo-hub.env
+ExecStart=/usr/bin/python3 -m codex_approval.executor --allowed-uid ${REQUESTER_UID} --origin ${APPROVAL_ORIGIN} --rp-id ${APPROVAL_RP_ID} --container-target ${SPOKE_TARGET_SPEC}
+Restart=on-failure
+RestartSec=2
+UMask=0077
+RuntimeDirectory=codex-approval
+RuntimeDirectoryMode=0755
+StateDirectory=codex-approval
+StateDirectoryMode=0700
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectHome=true
+# Package and kernel maintenance needs read access to /usr/lib/modules.
+# The executor still cannot load arbitrary modules unless an approved command
+# explicitly does so.
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

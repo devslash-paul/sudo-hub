@@ -1,0 +1,28 @@
+[Unit]
+Description=Sudo Hub passkey approval broker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sudo-hub
+Group=sudo-hub
+WorkingDirectory=/opt/sudo-hub
+Environment=PYTHONPATH=/opt/sudo-hub/src
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/sudo-hub/sudo-hub.env
+ExecStart=/opt/sudo-hub/.venv/bin/python -m codex_approval.server --listen 127.0.0.1 --port 8787 --origin ${APPROVAL_ORIGIN} --rp-id ${APPROVAL_RP_ID} --vapid-subject ${VAPID_SUBJECT} --data-dir /var/lib/sudo-hub --client-token-file /var/lib/sudo-hub/client-token --scoped-client-token-file ${SPOKE_TOKEN_SPEC}
+Restart=on-failure
+RestartSec=2
+StateDirectory=sudo-hub
+StateDirectoryMode=0700
+
+# The broker is intentionally unprivileged; the root executor is separate.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

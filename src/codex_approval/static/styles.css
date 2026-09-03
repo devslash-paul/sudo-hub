@@ -1,0 +1,30 @@
+:root { color-scheme:dark; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif; background:#101412; color:#f4f6f5 }
+* { box-sizing:border-box }
+body { margin:0; min-height:100vh; min-height:100dvh; background:#101412 }
+main { width:min(calc(100% - 1.5rem),32rem); margin:0 auto; padding:max(2rem,env(safe-area-inset-top)) 0 max(3rem,env(safe-area-inset-bottom)) }
+h1 { font-size:clamp(2.15rem,10vw,3rem); line-height:1; letter-spacing:-.055em; margin:.65rem 0 .8rem }
+h2 { margin:0; font-size:1.3rem; letter-spacing:-.02em; overflow-wrap:anywhere }
+.muted { color:#a9b8af; line-height:1.5 }
+.card { background:#191f1b; border:1px solid #3a443e; border-radius:.75rem; padding:1.35rem; margin:1.25rem 0 }
+.card.high-risk { border-color:#814b4d }
+.card.lease-card { border-color:#53705e }
+.lease-note { color:#dcebe1; background:#223128; border-left:4px solid #68d889; padding:.9rem 1rem; line-height:1.45 }
+.card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem }
+.tag,.target { display:inline-flex; align-items:center; border-radius:.35rem; font-size:.8rem; font-weight:750 }
+.tag { color:#b7f6c8; background:#173d25; border:1px solid #347047; padding:.42rem .78rem; text-transform:uppercase; letter-spacing:.09em }
+.target { color:#def3e5; background:#2a4033; border:1px solid #405c49; padding:.4rem .7rem; white-space:nowrap }
+.warning { color:#ffc1c1; background:#381e20; border:1px solid #764043; border-radius:.4rem; padding:.85rem .95rem; font-size:.9rem; line-height:1.45 }
+dl { display:grid; grid-template-columns:7rem 1fr; gap:.7rem; margin:1.2rem 0; overflow-wrap:anywhere; font-size:.95rem }
+dt { color:#91a399 } dd { margin:0; color:#edf3ef; font-weight:600 }
+pre { margin:0 0 1.15rem; white-space:pre-wrap; overflow-wrap:anywhere; background:#0c100e; border:1px solid #303833; border-radius:.4rem; padding:1rem; color:#d9eadd; font:500 .88rem/1.55 ui-monospace,SFMono-Regular,Menlo,monospace }
+.actions { display:grid; grid-template-columns:1fr; gap:.75rem }
+button { width:100%; border:1px solid transparent; border-radius:.5rem; padding:1rem; font:750 1.05rem inherit; cursor:pointer; touch-action:manipulation }
+button:active:not(:disabled) { transform:scale(.98) }
+button:disabled { filter:grayscale(1); opacity:.55; cursor:wait }
+button.approve { min-height:5.5rem; background:#68d889; border-color:#82e59e; color:#06220e; font-size:1.25rem }
+button.deny { min-height:4.25rem; background:#421f22; border-color:#85484c; color:#ffd0d0; font-size:1.08rem }
+button.secondary { min-height:3.75rem; background:#263a2e; border-color:#405848; color:#e4f8e9; margin-top:.8rem }
+.empty { text-align:center; padding:2rem 1.3rem }
+#message { min-height:1.5rem; margin:1rem .25rem; color:#c7d8cd }
+input { font:inherit }
+@media (max-width:380px) { dl { grid-template-columns:1fr; gap:.2rem } dd { margin-bottom:.55rem } }

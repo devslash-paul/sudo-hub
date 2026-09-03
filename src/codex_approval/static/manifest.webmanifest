@@ -1,0 +1,11 @@
+{
+  "id": "/",
+  "name": "Codex Approval",
+  "short_name": "Approve",
+  "description": "Face ID approval for privileged Codex operations",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101713",
+  "theme_color": "#101713"
+}

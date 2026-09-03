@@ -1,0 +1,22 @@
+.env
+.venv/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+build/
+dist/
+
+# Runtime state contains bearer tokens, passkey material, push endpoints, and leases.
+data/
+*.pem
+credential.json
+client-token*
+push-subscriptions.json
+active-leases.json
+
+# Local deployment snapshots and machine-specific client/skill variants.
+rollback/
+deploy/*.env
+!deploy/*.env.example
