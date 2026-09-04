@@ -23,7 +23,9 @@ def test_units_use_the_hub_environment_and_managed_virtualenv():
     assert "/opt/sudo-hub/.venv/bin/sudo-hub-executor" in executor
     assert "/usr/bin/python3" not in executor
     assert "${SPOKE_TOKEN_SPEC}" in broker
+    assert "--guest-target ${SPOKE_TARGET_SPEC}" in broker
     assert "${SPOKE_TARGET_SPEC}" in executor
+    assert "--guest-target ${SPOKE_TARGET_SPEC}" in executor
 
 
 def test_public_environment_examples_contain_no_private_topology():
@@ -31,7 +33,8 @@ def test_public_environment_examples_contain_no_private_topology():
     spoke = Path("deploy/spoke.env.example").read_text()
     assert "approve.example.com" in hub
     assert "SPOKE_TOKEN_SPEC=spoke=" in hub
-    assert "SPOKE_TARGET_SPEC=spoke=123" in hub
+    assert "SPOKE_TARGET_SPEC=spoke=lxc:123" in hub
+    assert "qemu:VMID" in hub
     assert "approve.example.com" in spoke
     assert "SUDO_HUB_CLIENT_USER=automation" in spoke
 

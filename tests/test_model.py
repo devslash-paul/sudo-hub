@@ -15,3 +15,15 @@ def test_request_digest_is_bound_to_target():
     host = Request("admin.command", {"argv":["/usr/bin/id"]}, "agent", "host", target="host", id="same", created_at=1)
     container = Request("admin.command", {"argv":["/usr/bin/id"]}, "agent", "host", target="spoke", id="same", created_at=1)
     assert host.digest != container.digest
+
+
+def test_request_digest_is_bound_to_guest_type_and_vmid():
+    lxc = Request(
+        "guest.admin.command", {"argv":["/usr/bin/id"]}, "agent", "host",
+        target="spoke", target_spec="lxc:123", id="same", created_at=1,
+    )
+    qemu = Request(
+        "guest.admin.command", {"argv":["/usr/bin/id"]}, "agent", "host",
+        target="spoke", target_spec="qemu:220", id="same", created_at=1,
+    )
+    assert lxc.digest != qemu.digest

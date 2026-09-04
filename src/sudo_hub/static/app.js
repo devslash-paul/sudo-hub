@@ -85,8 +85,8 @@ function card(request) {
   const title = document.createElement('h2'); title.textContent = request.operation.split('.').map(word=>word[0].toUpperCase()+word.slice(1)).join(' ');
   const target=document.createElement('span'); target.className='target'; target.textContent=request.target;
   head.append(title,target); section.append(head);
-  const isLease=['container.command.lease','command.lease','approval.batch'].includes(request.operation);
-  if (request.operation === 'admin.command' || request.operation === 'container.admin.command') {
+  const isLease=['guest.command.lease','container.command.lease','command.lease','approval.batch'].includes(request.operation);
+  if (['admin.command','guest.admin.command','container.admin.command'].includes(request.operation)) {
     section.classList.add('high-risk');
     const warning=document.createElement('p'); warning.className='warning';
     warning.textContent='HIGH RISK — this exact command will run as root. Verify every argument.';
@@ -100,7 +100,7 @@ function card(request) {
     section.append(warning);
   }
   const details = document.createElement('dl');
-  for (const [label, value] of [['Target',request.target],['Task',request.task_id],['Request source',request.host],['Requester',request.requester],['Created',new Date(request.created_at*1000).toLocaleString()]]) {
+  for (const [label, value] of [['Target',request.target],['Guest binding',request.target_spec],['Task',request.task_id],['Request source',request.host],['Requester',request.requester],['Created',new Date(request.created_at*1000).toLocaleString()]]) {
     if (!value) continue;
     const dt=document.createElement('dt'), dd=document.createElement('dd'); dt.textContent=label; dd.textContent=value; details.append(dt,dd);
   }

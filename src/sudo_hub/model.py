@@ -20,6 +20,7 @@ class Request:
     host: str
     target: str = "host"
     task_id: str | None = None
+    target_spec: str | None = None
     id: str = field(default_factory=lambda: secrets.token_urlsafe(18))
     created_at: int = field(default_factory=lambda: int(time.time()))
     state: str = "pending"
@@ -37,6 +38,8 @@ class Request:
         }
         if self.task_id is not None:
             value["task_id"] = self.task_id
+        if self.target_spec is not None:
+            value["target_spec"] = self.target_spec
         return value
 
     @property

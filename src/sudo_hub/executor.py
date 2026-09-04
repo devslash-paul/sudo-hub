@@ -14,7 +14,13 @@ import time
 from pathlib import Path
 
 from .model import Request, canonical_json
-from .operations import PolicyError, build_target_plan, lease_command_is_read_only
+from .operations import (
+    GUEST_LEASE_OPERATIONS,
+    PolicyError,
+    build_target_plan,
+    lease_command_is_read_only,
+    parse_guest_targets,
+)
 from .webauthn import Credential, b64d, verify_assertion
 
 
@@ -26,14 +32,23 @@ class LeaseMismatch(PolicyError):
     pass
 
 
+LEASE_OPERATIONS = GUEST_LEASE_OPERATIONS | {"command.lease", "approval.batch"}
+
+
 class Executor:
-    def __init__(self, credential_file: Path, origin: str, rp_id: str, audit_file: Path, allowed_uid: int, container_targets: dict[str, str] | None = None, root_uid: int = 0, lease_file: Path | None = None):
+    def __init__(self, credential_file: Path, origin: str, rp_id: str, audit_file: Path, allowed_uid: int, container_targets: dict[str, str] | None = None, root_uid: int = 0, lease_file: Path | None = None, *, guest_targets: dict[str, str] | None = None):
         self.credential_file = credential_file
         self.origin = origin
         self.rp_id = rp_id
         self.audit_file = audit_file
         self.allowed_uid = allowed_uid
-        self.container_targets = container_targets or {}
+        if guest_targets is not None and container_targets is not None:
+            raise ValueError("use guest_targets or container_targets, not both")
+        configured_targets = guest_targets if guest_targets is not None else (container_targets or {})
+        self.guest_targets = parse_guest_targets([
+            f"{name}={value}" for name, value in configured_targets.items()
+        ])
+        self.container_targets = self.guest_targets  # compatibility for pre-VM callers
         self.root_uid = root_uid
         self.lease_file = lease_file
         self.used = set()
@@ -91,8 +106,10 @@ class Executor:
         request = Request(
             raw["operation"], raw["parameters"], raw["requester"], raw["host"],
             target=raw.get("target", "host"), task_id=raw.get("task_id"),
+            target_spec=raw.get("target_spec"),
             id=raw["id"], created_at=raw["created_at"],
         )
+        self.validate_target_binding(request)
         challenge = b64d(bundle["challenge"])
         if len(challenge) != 64 or challenge[:32] != request.digest:
             raise PolicyError("approval is not bound to this request")
@@ -103,8 +120,17 @@ class Executor:
         if challenge_hash in self.used:
             raise PolicyError("approval has already been used")
         verify_assertion(bundle["assertion"], self.credential(), challenge, self.origin, self.rp_id)
-        plan = None if request.operation in {"container.command.lease", "command.lease", "approval.batch"} else build_target_plan(request.operation, request.parameters, target=request.target, container_targets=self.container_targets, root_uid=self.root_uid)
+        plan = None if request.operation in LEASE_OPERATIONS else build_target_plan(request.operation, request.parameters, target=request.target, guest_targets=self.guest_targets, root_uid=self.root_uid)
         return request, challenge_hash, plan
+
+    def validate_target_binding(self, request: Request):
+        if request.target == "host":
+            if request.target_spec is not None:
+                raise PolicyError("host request must not include a guest target binding")
+            return
+        configured = self.guest_targets.get(request.target)
+        if configured is None or request.target_spec != configured:
+            raise PolicyError("request is not bound to the configured guest target")
 
     @staticmethod
     def batch_key(operation: str, parameters: dict, target: str) -> str:
@@ -123,15 +149,15 @@ class Executor:
             if not isinstance(item, dict) or set(item) != {"operation", "parameters"}:
                 raise PolicyError("each batch item must contain only operation and parameters")
             operation, parameters = item["operation"], item["parameters"]
-            if not isinstance(operation, str) or not isinstance(parameters, dict) or operation in {"approval.batch", "container.command.lease", "command.lease"}:
+            if not isinstance(operation, str) or not isinstance(parameters, dict) or operation in LEASE_OPERATIONS:
                 raise PolicyError("batch contains an invalid or nested operation")
-            plan = build_target_plan(operation, parameters, target=request.target, container_targets=self.container_targets, root_uid=self.root_uid)
+            plan = build_target_plan(operation, parameters, target=request.target, guest_targets=self.guest_targets, root_uid=self.root_uid)
             key = self.batch_key(operation, parameters, request.target)
             allowed[key] = allowed.get(key, 0) + 1
             summaries.append(plan.summary)
         lease_id = secrets.token_urlsafe(32)
         expires_at = int(time.time()) + duration
-        self.leases[lease_id] = {"kind":"batch", "target":request.target, "task_id":request.task_id,
+        self.leases[lease_id] = {"kind":"batch", "target":request.target, "target_spec":request.target_spec, "task_id":request.task_id,
                                  "expires_at":expires_at, "remaining":len(commands), "allowed":allowed}
         self._save_leases()
         return {"ok":True, "lease_id":lease_id, "expires_at":expires_at, "max_commands":len(commands),
@@ -145,10 +171,14 @@ class Executor:
         goal = request.parameters.get("goal")
         if not request.task_id:
             raise PolicyError("lease target or task is invalid")
-        if request.operation == "container.command.lease":
-            if request.target not in self.container_targets:
+        if request.operation in GUEST_LEASE_OPERATIONS:
+            if request.target not in self.guest_targets:
                 raise PolicyError("lease target or task is invalid")
-            allowed_operation = "container.admin.command"
+            allowed_operation = (
+                "container.admin.command"
+                if request.operation == "container.command.lease"
+                else "guest.admin.command"
+            )
         elif request.operation == "command.lease" and request.target == "host":
             allowed_operation = "admin.command"
         else:
@@ -164,7 +194,7 @@ class Executor:
         lease_id = secrets.token_urlsafe(32)
         expires_at = int(time.time()) + duration
         self.leases[lease_id] = {
-            "kind":"command", "operation":allowed_operation, "group":group, "goal":goal.strip(), "target": request.target, "task_id": request.task_id,
+            "kind":"command", "operation":allowed_operation, "group":group, "goal":goal.strip(), "target": request.target, "target_spec":request.target_spec, "task_id": request.task_id,
             "expires_at": expires_at, "remaining": max_commands,
         }
         self._save_leases()
@@ -176,11 +206,14 @@ class Executor:
         request = Request(
             raw["operation"], raw["parameters"], raw["requester"], raw["host"],
             target=raw.get("target", "host"), task_id=raw.get("task_id"),
+            target_spec=raw.get("target_spec"),
             id=raw["id"], created_at=raw["created_at"],
         )
+        self.validate_target_binding(request)
         lease = self.leases.get(bundle.get("lease_id", ""))
         if (lease is None or lease["expires_at"] < int(time.time()) or lease["remaining"] <= 0
                 or request.target != lease["target"]
+                or request.target_spec != lease.get("target_spec")
                 or request.task_id != lease["task_id"] or abs(int(time.time()) - request.created_at) > 30):
             raise LeaseInvalid("lease is invalid, expired, exhausted, or outside its task scope")
         if lease["kind"] == "command":
@@ -195,10 +228,73 @@ class Executor:
             lease["allowed"][key] -= 1
         else:
             raise PolicyError("lease type is invalid")
-        plan = build_target_plan(request.operation, request.parameters, target=request.target, container_targets=self.container_targets, root_uid=self.root_uid)
+        plan = build_target_plan(request.operation, request.parameters, target=request.target, guest_targets=self.guest_targets, root_uid=self.root_uid)
         lease["remaining"] -= 1
         self._save_leases()
         return request, plan, lease["remaining"], lease["expires_at"]
+
+    @staticmethod
+    def execute_plan(plan):
+        environment = {"PATH":"/usr/sbin:/usr/bin:/sbin:/bin", "LANG":"C.UTF-8"}
+        if plan.result_format != "qemu-guest-agent":
+            completed = subprocess.run(
+                plan.argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True, timeout=plan.timeout,
+                env=environment, cwd="/", check=False,
+            )
+            return {
+                "ok": completed.returncode == 0,
+                "exit_code": completed.returncode,
+                "summary": plan.summary,
+                "output": completed.stdout[-32_000:],
+            }
+
+        completed = subprocess.run(
+            plan.argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, timeout=plan.timeout + 3,
+            env=environment, cwd="/", check=False,
+        )
+        transport_output = (completed.stdout + completed.stderr)[-32_000:]
+        if completed.returncode != 0:
+            return {
+                "ok": False,
+                "exit_code": completed.returncode,
+                "summary": plan.summary,
+                "output": transport_output,
+                "error": "QEMU Guest Agent command failed",
+            }
+        try:
+            guest_result = json.loads(completed.stdout)
+        except (TypeError, ValueError):
+            return {
+                "ok": False,
+                "exit_code": 1,
+                "summary": plan.summary,
+                "output": transport_output,
+                "error": "QEMU Guest Agent returned an invalid result",
+            }
+        if not isinstance(guest_result, dict) or not guest_result.get("exited"):
+            return {
+                "ok": False,
+                "exit_code": 1,
+                "summary": plan.summary,
+                "output": transport_output,
+                "error": "QEMU guest command did not finish before the timeout",
+            }
+        signal = guest_result.get("signal")
+        exit_code = guest_result.get("exitcode")
+        if not isinstance(exit_code, int):
+            exit_code = 128 + signal if isinstance(signal, int) and 0 < signal < 128 else 1
+        output = "".join(
+            value for value in (guest_result.get("out-data"), guest_result.get("err-data"))
+            if isinstance(value, str)
+        )[-32_000:]
+        return {
+            "ok": exit_code == 0 and signal is None,
+            "exit_code": exit_code,
+            "summary": plan.summary,
+            "output": output,
+        }
 
     def handle(self, bundle: dict):
         request = None
@@ -215,33 +311,21 @@ class Executor:
                     return {"ok":False, "lease_invalid":True, "error":str(exc)}
                 self.audit({"event":"lease_used", "request_id":request.id, "operation":request.operation,
                             "task_id":request.task_id, "remaining":remaining, "argv":plan.argv})
-                completed = subprocess.run(
-                    plan.argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT, text=True, timeout=plan.timeout,
-                    env={"PATH":"/usr/sbin:/usr/bin:/sbin:/bin", "LANG":"C.UTF-8"}, cwd="/", check=False,
-                )
-                return {"ok":completed.returncode == 0, "exit_code":completed.returncode,
-                        "summary":plan.summary, "output":completed.stdout[-32_000:],
-                        "lease":{"remaining":remaining, "expires_at":expires_at}}
+                result = self.execute_plan(plan)
+                result["lease"] = {"remaining":remaining, "expires_at":expires_at}
+                return result
             request, challenge_hash, plan = self.authorize(bundle)
             # Mark the challenge used before invoking the operation. A crash can deny
             # a retry, but can never execute the same approval twice.
             self.used.add(challenge_hash)
-            if request.operation in {"container.command.lease", "command.lease", "approval.batch"}:
+            if request.operation in LEASE_OPERATIONS:
                 result = self.grant_batch(request) if request.operation == "approval.batch" else self.grant_lease(request)
                 self.audit({"event":"lease_granted", "request_id":request.id, "task_id":request.task_id,
                             "target":request.target, "expires_at":result["expires_at"], "max_commands":result["max_commands"]})
                 return result
             self.audit({"event":"accepted", "request_id":request.id, "operation":request.operation, "challenge_hash":challenge_hash, "argv":plan.argv})
-            completed = subprocess.run(
-                plan.argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, text=True, timeout=plan.timeout,
-                env={"PATH":"/usr/sbin:/usr/bin:/sbin:/bin", "LANG":"C.UTF-8"},
-                cwd="/", check=False,
-            )
-            output = completed.stdout[-32_000:]
-            result = {"ok": completed.returncode == 0, "exit_code": completed.returncode, "summary": plan.summary, "output": output}
-            self.audit({"event":"completed", "request_id":request.id, "operation":request.operation, "challenge_hash":challenge_hash, "exit_code":completed.returncode})
+            result = self.execute_plan(plan)
+            self.audit({"event":"completed", "request_id":request.id, "operation":request.operation, "challenge_hash":challenge_hash, "exit_code":result["exit_code"]})
             return result
         except subprocess.TimeoutExpired:
             result = {"ok":False, "error":"operation timed out"}
@@ -264,19 +348,21 @@ def main():
     peer = parser.add_mutually_exclusive_group()
     peer.add_argument("--allowed-user", default="sudo-hub")
     peer.add_argument("--allowed-uid", type=int)
-    parser.add_argument("--container-target", action="append", default=[], metavar="NAME=VMID")
+    parser.add_argument("--guest-target", action="append", default=[], metavar="NAME=TYPE:VMID")
+    parser.add_argument("--container-target", action="append", default=[], metavar="NAME=VMID", help=argparse.SUPPRESS)
     args = parser.parse_args()
-    container_targets = {}
-    for item in args.container_target:
-        name, separator, vmid = item.partition("=")
-        if not separator or not name or not vmid:
-            raise SystemExit("--container-target must be NAME=VMID")
-        container_targets[name] = vmid
+    try:
+        guest_targets = parse_guest_targets(args.guest_target, args.container_target)
+    except PolicyError as exc:
+        raise SystemExit(str(exc)) from exc
     try:
         allowed_uid = args.allowed_uid if args.allowed_uid is not None else pwd.getpwnam(args.allowed_user).pw_uid
     except KeyError as exc:
         raise SystemExit(f"allowed user does not exist: {args.allowed_user}") from exc
-    executor = Executor(args.credential, args.origin, args.rp_id, args.audit, allowed_uid, container_targets, lease_file=args.lease_file)
+    executor = Executor(
+        args.credential, args.origin, args.rp_id, args.audit, allowed_uid,
+        lease_file=args.lease_file, guest_targets=guest_targets,
+    )
     args.socket.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
     os.chmod(args.socket.parent, 0o755)
     args.socket.unlink(missing_ok=True)

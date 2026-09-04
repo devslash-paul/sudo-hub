@@ -50,10 +50,39 @@ def test_container_admin_command_is_bound_to_configured_target():
     )
     assert plan.argv == ("/usr/sbin/pct", "exec", "123", "--", "/usr/bin/apt-get", "update")
     assert "spoke (LXC 123)" in plan.summary
-    with pytest.raises(PolicyError, match="allowed container"):
+    with pytest.raises(PolicyError, match="allowed guest"):
         build_target_plan(
             "container.admin.command", {"argv":["/usr/bin/id"]},
             target="host", container_targets={"spoke":"123"},
+        )
+
+
+def test_guest_admin_command_supports_typed_lxc_and_qemu_targets():
+    lxc = build_target_plan(
+        "guest.admin.command", {"argv":["/usr/bin/id"]},
+        target="web", guest_targets={"web":"lxc:123"},
+    )
+    assert lxc.argv == ("/usr/sbin/pct", "exec", "123", "--", "/usr/bin/id")
+    assert lxc.result_format == "process"
+
+    qemu = build_target_plan(
+        "guest.admin.command", {"argv":["/usr/bin/id"], "timeout":120},
+        target="database", guest_targets={"database":"qemu:220"},
+    )
+    assert qemu.argv == (
+        "/usr/sbin/qm", "guest", "exec", "220", "--timeout", "120", "--",
+        "/usr/bin/id",
+    )
+    assert qemu.result_format == "qemu-guest-agent"
+    assert "database (QEMU VM 220)" in qemu.summary
+
+
+@pytest.mark.parametrize("spec", ["vm:220", "qemu:99", "lxc:not-a-vmid", "qemu:220:extra"])
+def test_guest_admin_command_rejects_invalid_target_specs(spec):
+    with pytest.raises(PolicyError, match="lxc:VMID or qemu:VMID"):
+        build_target_plan(
+            "guest.admin.command", {"argv":["/usr/bin/id"]},
+            target="spoke", guest_targets={"spoke":spec},
         )
 
 

@@ -24,7 +24,7 @@ def main():
     token.add_argument("--token-file")
     parser.add_argument("--requester", default="sudo-hub-client")
     parser.add_argument("--task-id")
-    parser.add_argument("--lease", action="store_true", help="request a short container command lease")
+    parser.add_argument("--lease", action="store_true", help="request a short guest command lease")
     parser.add_argument("--duration", type=int, default=60)
     parser.add_argument("--max-commands", type=int, default=20)
     parser.add_argument("--group")
@@ -37,7 +37,7 @@ def main():
     if args.lease:
         if not args.task_id or not args.group or not args.goal:
             parser.error("--lease requires --task-id, --group, and --goal")
-        operation = "container.command.lease"
+        operation = "guest.command.lease"
         parameters = {"duration":args.duration, "max_commands":args.max_commands, "group":args.group, "goal":args.goal}
     else:
         if args.operation is None or args.parameters is None:

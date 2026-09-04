@@ -1,5 +1,6 @@
 import hashlib
 import json
+import subprocess
 import struct
 import time
 import pytest
@@ -8,10 +9,52 @@ import os
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from sudo_hub.executor import Executor
+from sudo_hub.executor import Executor, parse_guest_targets
 from sudo_hub.model import Request
 from sudo_hub.webauthn import b64e
-from sudo_hub.operations import PolicyError
+from sudo_hub.operations import Plan, PolicyError
+
+
+def test_guest_target_arguments_are_typed_and_legacy_lxc_is_preserved():
+    assert parse_guest_targets(["database=qemu:220", "web=lxc:123"], []) == {
+        "database":"qemu:220", "web":"lxc:123",
+    }
+    assert parse_guest_targets([], ["legacy=124"]) == {"legacy":"lxc:124"}
+    with pytest.raises(PolicyError, match="configured more than once"):
+        parse_guest_targets(["web=lxc:123"], ["web=124"])
+
+
+def test_qemu_guest_agent_result_uses_guest_exit_status(monkeypatch):
+    plan = Plan(
+        ("/usr/sbin/qm", "guest", "exec", "220", "--timeout", "30", "--", "/usr/bin/id"),
+        "Run command in VM", timeout=30, result_format="qemu-guest-agent",
+    )
+    completed = subprocess.CompletedProcess(
+        plan.argv, 0,
+        stdout=json.dumps({"exited":1, "exitcode":7, "out-data":"stdout\n", "err-data":"stderr\n"}),
+        stderr="",
+    )
+    monkeypatch.setattr("sudo_hub.executor.subprocess.run", lambda *args, **kwargs: completed)
+
+    result = Executor.execute_plan(plan)
+
+    assert not result["ok"]
+    assert result["exit_code"] == 7
+    assert result["output"] == "stdout\nstderr\n"
+
+
+def test_qemu_guest_agent_timeout_result_is_not_reported_as_success(monkeypatch):
+    plan = Plan(
+        ("/usr/sbin/qm", "guest", "exec", "220", "--", "/usr/bin/id"),
+        "Run command in VM", timeout=30, result_format="qemu-guest-agent",
+    )
+    completed = subprocess.CompletedProcess(plan.argv, 0, stdout=json.dumps({"pid":42}), stderr="")
+    monkeypatch.setattr("sudo_hub.executor.subprocess.run", lambda *args, **kwargs: completed)
+
+    result = Executor.execute_plan(plan)
+
+    assert not result["ok"]
+    assert "did not finish" in result["error"]
 
 
 def test_executor_independently_verifies_bound_assertion(tmp_path):
@@ -57,7 +100,7 @@ def test_executor_routes_signed_container_target(tmp_path):
     credential_file.write_text(json.dumps(credential))
     request = Request(
         "container.admin.command", {"argv":["/usr/bin/id"]},
-        "agent", "code", target="spoke",
+        "agent", "code", target="spoke", target_spec="lxc:123",
     )
     challenge = request.digest + struct.pack(">Q", int(time.time())) + b"r" * 24
     client_data = json.dumps({"type":"webauthn.get", "challenge":b64e(challenge), "origin":origin}).encode()
@@ -79,9 +122,9 @@ def test_executor_routes_signed_container_target(tmp_path):
 
 def test_container_lease_is_task_target_time_and_count_bound(tmp_path):
     executor = Executor(tmp_path / "credential", "https://approve.test", "approve.test", tmp_path / "audit", 1000, {"spoke":"123"})
-    grant = Request("container.command.lease", {"duration":60, "max_commands":1, "group":"Inspect spoke", "goal":"Inspect container health without changing state"}, "agent", "code", target="spoke", task_id="task_123456")
+    grant = Request("container.command.lease", {"duration":60, "max_commands":1, "group":"Inspect spoke", "goal":"Inspect container health without changing state"}, "agent", "code", target="spoke", task_id="task_123456", target_spec="lxc:123")
     issued = executor.grant_lease(grant)
-    command = Request("container.admin.command", {"argv":["/usr/bin/id"]}, "agent", "code", target="spoke", task_id="task_123456")
+    command = Request("container.admin.command", {"argv":["/usr/bin/id"]}, "agent", "code", target="spoke", task_id="task_123456", target_spec="lxc:123")
 
     _, plan, remaining, _ = executor.authorize_lease({"request":command.signed_payload(), "lease_id":issued["lease_id"]})
     assert plan.argv == ("/usr/sbin/pct", "exec", "123", "--", "/usr/bin/id")
@@ -92,10 +135,10 @@ def test_container_lease_is_task_target_time_and_count_bound(tmp_path):
 
 def test_container_lease_cannot_change_task_target_or_operation(tmp_path):
     executor = Executor(tmp_path / "credential", "https://approve.test", "approve.test", tmp_path / "audit", 1000, {"spoke":"123"})
-    grant = Request("container.command.lease", {"duration":60, "max_commands":5, "group":"Inspect spoke", "goal":"Inspect container health without changing state"}, "agent", "code", target="spoke", task_id="task_123456")
+    grant = Request("container.command.lease", {"duration":60, "max_commands":5, "group":"Inspect spoke", "goal":"Inspect container health without changing state"}, "agent", "code", target="spoke", task_id="task_123456", target_spec="lxc:123")
     lease_id = executor.grant_lease(grant)["lease_id"]
     for request in (
-        Request("container.admin.command", {"argv":["/usr/bin/id"]}, "agent", "code", target="spoke", task_id="other_123456"),
+        Request("container.admin.command", {"argv":["/usr/bin/id"]}, "agent", "code", target="spoke", task_id="other_123456", target_spec="lxc:123"),
         Request("admin.command", {"argv":["/usr/bin/id"]}, "agent", "code", target="host", task_id="task_123456"),
     ):
         with pytest.raises(PolicyError, match="outside its task scope"):
@@ -105,9 +148,42 @@ def test_container_lease_cannot_change_task_target_or_operation(tmp_path):
 def test_container_lease_limits_are_narrow(tmp_path):
     executor = Executor(tmp_path / "credential", "https://approve.test", "approve.test", tmp_path / "audit", 1000, {"spoke":"123"})
     for parameters in ({"duration":301,"max_commands":1,"group":"Inspect spoke","goal":"Inspect container health without changing state"}, {"duration":60,"max_commands":51,"group":"Inspect spoke","goal":"Inspect container health without changing state"}):
-        request = Request("container.command.lease", parameters, "agent", "code", target="spoke", task_id="task_123456")
+        request = Request("container.command.lease", parameters, "agent", "code", target="spoke", task_id="task_123456", target_spec="lxc:123")
         with pytest.raises(PolicyError):
             executor.grant_lease(request)
+
+
+def test_guest_lease_routes_qemu_target_and_checks_signed_binding(tmp_path):
+    executor = Executor(
+        tmp_path / "credential", "https://approve.test", "approve.test",
+        tmp_path / "audit", 1000, guest_targets={"database":"qemu:220"},
+    )
+    grant = Request(
+        "guest.command.lease",
+        {"duration":60, "max_commands":2, "group":"Inspect database", "goal":"Inspect database VM health"},
+        "agent", "code", target="database", task_id="task_123456", target_spec="qemu:220",
+    )
+    issued = executor.grant_lease(grant)
+    command = Request(
+        "guest.admin.command", {"argv":["/usr/bin/id"]}, "agent", "code",
+        target="database", task_id="task_123456", target_spec="qemu:220",
+    )
+
+    _, plan, _, _ = executor.authorize_lease({
+        "request":command.signed_payload(), "lease_id":issued["lease_id"],
+    })
+
+    assert plan.result_format == "qemu-guest-agent"
+    assert plan.argv[:5] == ("/usr/sbin/qm", "guest", "exec", "220", "--timeout")
+
+    changed_binding = Request(
+        "guest.admin.command", {"argv":["/usr/bin/id"]}, "agent", "code",
+        target="database", task_id="task_123456", target_spec="qemu:221",
+    )
+    with pytest.raises(PolicyError, match="bound to the configured guest"):
+        executor.authorize_lease({
+            "request":changed_binding.signed_payload(), "lease_id":issued["lease_id"],
+        })
 
 
 def test_unlisted_host_command_lease_is_task_time_and_count_bound(tmp_path):
@@ -177,7 +253,7 @@ def test_exact_batch_works_on_host_and_cannot_change_arguments(tmp_path):
 
 def test_batch_rejects_nested_or_invalid_operations(tmp_path):
     executor = Executor(tmp_path / "credential", "https://approve.test", "approve.test", tmp_path / "audit", 1000)
-    for operation in ("approval.batch", "container.command.lease", "command.lease"):
+    for operation in ("approval.batch", "guest.command.lease", "container.command.lease", "command.lease"):
         grant = Request("approval.batch", {"duration":60, "requests":[{"operation":operation,"parameters":{}}]}, "agent", "host", task_id="batch_123456")
         with pytest.raises(PolicyError, match="nested"):
             executor.grant_batch(grant)
