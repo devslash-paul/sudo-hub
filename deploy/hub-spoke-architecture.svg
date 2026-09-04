@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title description">
   <title id="title">Sudo Hub hub-and-spoke deployment architecture</title>
-  <desc id="description">An owner approves requests from a phone. Spoke systems send scoped requests over HTTPS to an unprivileged broker on the Proxmox hub. The broker passes signed approvals over a Unix socket to a root executor, which performs host operations or explicitly mapped LXC operations.</desc>
+  <desc id="description">An owner approves requests from a phone. Spoke systems send scoped requests over HTTPS to an unprivileged broker on the Proxmox hub. The broker passes signed approvals over a Unix socket to a root executor, which performs host operations or dispatches exact commands to explicitly mapped LXC and Linux QEMU guests.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
@@ -71,7 +71,7 @@
     <text class="small" x="686" y="215">unprivileged</text>
     <text class="mono" x="535" y="251">sudo-hub.service</text>
     <text class="body" x="535" y="283">• Receives typed requests</text>
-    <text class="body" x="535" y="308">• Displays approval details</text>
+    <text class="body" x="535" y="308">• Displays target type + VMID</text>
     <text class="body" x="535" y="333">• Issues WebAuthn challenge</text>
     <text class="body" x="535" y="358">• Cannot execute commands</text>
     <text class="small" x="535" y="391">State: /var/lib/sudo-hub</text>
@@ -85,7 +85,7 @@
     <text class="small" x="1035" y="215">root</text>
     <text class="mono" x="871" y="251">sudo-hub-executor.service</text>
     <text class="body" x="871" y="283">• Re-verifies assertion</text>
-    <text class="body" x="871" y="308">• Checks request digest</text>
+    <text class="body" x="871" y="308">• Checks digest + guest binding</text>
     <text class="body" x="871" y="333">• Builds policy argv</text>
     <text class="body" x="871" y="358">• Writes audit log</text>
     <text class="small" x="871" y="391">Credential: /etc/sudo-hub</text>
@@ -101,10 +101,10 @@
   </g>
   <g filter="url(#shadow)">
     <rect x="846" y="520" width="270" height="132" rx="16" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
-    <text class="box-title" x="871" y="555">Mapped LXC target</text>
-    <text class="mono" x="871" y="586">pct exec VMID -- argv…</text>
-    <text class="body" x="871" y="612">Exact configured spoke → VMID</text>
-    <text class="small" x="871" y="636">Command runs inside container</text>
+    <text class="box-title" x="871" y="555">Mapped guest target</text>
+    <text class="mono" x="871" y="583">lxc:123 → pct exec</text>
+    <text class="mono" x="871" y="607">qemu:220 → qm guest exec</text>
+    <text class="small" x="871" y="635">Exact argv runs inside Linux guest</text>
   </g>
 
   <!-- Data flows -->
@@ -125,7 +125,7 @@
   <path d="M963 411 C963 467 726 467 682 520" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
   <text class="flow-label" x="713" y="458">policy-built host command</text>
   <path d="M981 411 L981 520" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
-  <text class="flow-label" x="993" y="472">pct exec</text>
+  <text class="flow-label" x="993" y="472">typed guest driver</text>
 
   <!-- Credential handoff note -->
   <rect x="500" y="670" width="629" height="22" rx="6" fill="#fef3c7"/>

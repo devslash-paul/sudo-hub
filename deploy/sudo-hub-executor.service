@@ -6,7 +6,7 @@ ConditionPathExists=/etc/sudo-hub/credential.json
 [Service]
 Type=simple
 EnvironmentFile=/etc/sudo-hub/hub.env
-ExecStart=/opt/sudo-hub/.venv/bin/sudo-hub-executor --allowed-user sudo-hub --origin ${APPROVAL_ORIGIN} --rp-id ${APPROVAL_RP_ID} --container-target ${SPOKE_TARGET_SPEC}
+ExecStart=/opt/sudo-hub/.venv/bin/sudo-hub-executor --allowed-user sudo-hub --origin ${APPROVAL_ORIGIN} --rp-id ${APPROVAL_RP_ID} --guest-target ${SPOKE_TARGET_SPEC}
 Restart=on-failure
 RestartSec=2
 UMask=0077

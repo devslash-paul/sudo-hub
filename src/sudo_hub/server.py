@@ -20,11 +20,19 @@ from .webauthn import Credential, b64e, credential_from_registration, verify_ass
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from .operations import (
+    GUEST_ADMIN_OPERATIONS,
+    GUEST_LEASE_OPERATIONS,
+    PolicyError,
+    parse_guest_targets,
+)
+
 
 @dataclass(frozen=True)
 class ClientScope:
     target: str
     operations: frozenset[str] | None = None
+    target_spec: str | None = None
 
     def allows(self, operation: str) -> bool:
         return self.operations is None or operation in self.operations
@@ -32,6 +40,7 @@ class ClientScope:
 
 TARGET_NAME = re.compile(r"^[a-z0-9][a-z0-9.-]{0,62}$")
 TASK_ID = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+LEASE_OPERATIONS = GUEST_LEASE_OPERATIONS | {"command.lease", "approval.batch"}
 
 
 class Broker:
@@ -377,16 +386,17 @@ class Handler(BaseHTTPRequestHandler):
                         host=body.get("host", "unknown"),
                         target=scope.target,
                         task_id=body.get("taskId"),
+                        target_spec=scope.target_spec,
                     )
                     if not isinstance(request.operation, str) or not isinstance(request.parameters, dict):
                         raise ValueError("invalid request")
                     if request.task_id is not None and (not isinstance(request.task_id, str) or not TASK_ID.fullmatch(request.task_id)):
                         raise ValueError("taskId must be 8-128 URL-safe characters")
-                    if request.operation in {"container.command.lease", "command.lease", "approval.batch"} and request.task_id is None:
+                    if request.operation in LEASE_OPERATIONS and request.task_id is None:
                         raise ValueError("a taskId is required for a lease or batch")
                     self.broker.requests[request.id] = request
                     leased = False
-                    if request.operation not in {"container.command.lease", "command.lease", "approval.batch"} and request.task_id:
+                    if request.operation not in LEASE_OPERATIONS and request.task_id:
                         request.state = "executing"
                         self.broker.lock.release()
                         try:
@@ -515,6 +525,7 @@ def parser():
     token.add_argument("--client-token")
     token.add_argument("--client-token-file", type=Path)
     result.add_argument("--scoped-client-token-file", action="append", default=[], metavar="TARGET=PATH")
+    result.add_argument("--guest-target", action="append", default=[], metavar="NAME=TYPE:VMID")
     result.add_argument("--vapid-subject", default="mailto:admin@example.com", help="Web Push contact URI, normally a mailto: address")
     result.add_argument("--enrollment-token", help="one-time phone enrollment code; generated when omitted")
     return result
@@ -522,6 +533,10 @@ def parser():
 
 def main():
     args = parser().parse_args()
+    try:
+        guest_targets = parse_guest_targets(args.guest_target)
+    except PolicyError as exc:
+        raise SystemExit(str(exc)) from exc
     if args.client_token:
         client_token = args.client_token
     elif args.client_token_file.exists():
@@ -540,6 +555,8 @@ def main():
             raise SystemExit("--scoped-client-token-file must be TARGET=PATH")
         if not TARGET_NAME.fullmatch(target):
             raise SystemExit("scoped client target has an invalid name")
+        if target not in guest_targets:
+            raise SystemExit(f"scoped client target has no guest mapping: {target}")
         token_path = Path(raw_path)
         if token_path.exists():
             scoped_token = token_path.read_text().strip()
@@ -550,7 +567,11 @@ def main():
             token_path.chmod(0o600)
         if len(scoped_token) < 9 or scoped_token == client_token or scoped_token in scoped_client_tokens:
             raise SystemExit("scoped client tokens must be unique and at least 9 characters")
-        scoped_client_tokens[scoped_token] = ClientScope(target, frozenset({"container.admin.command", "container.command.lease", "approval.batch"}))
+        scoped_client_tokens[scoped_token] = ClientScope(
+            target,
+            GUEST_ADMIN_OPERATIONS | GUEST_LEASE_OPERATIONS | {"approval.batch"},
+            guest_targets[target],
+        )
     enrollment_token = args.enrollment_token or secrets.token_urlsafe(18)
     broker = Broker(args.data_dir, args.origin, args.rp_id, client_token, enrollment_token, scoped_client_tokens, args.vapid_subject)
     server = ThreadingHTTPServer((args.listen, args.port), Handler)

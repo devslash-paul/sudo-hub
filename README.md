@@ -2,7 +2,7 @@
 
 Sudo Hub is a small, phone-first approval broker for privileged Linux operations. A client submits a typed request to an unprivileged hub, the owner approves it with a WebAuthn passkey, and a separate root executor independently verifies the signed approval before running a policy-built command.
 
-It supports a hub-and-spoke topology: a host token can request host operations, while independently scoped spoke tokens can request commands only inside configured Proxmox LXC guests.
+It supports a hub-and-spoke topology: a host token can request host operations, while independently scoped spoke tokens can request commands only inside configured Proxmox LXC guests or Linux QEMU/KVM VMs.
 
 > [!WARNING]
 > This project is security-sensitive and pre-1.0. Read the code and adapt the policy to your environment before granting it root access. Do not expose the Python HTTP server directly to the public internet; put it behind authenticated TLS networking or a carefully configured reverse proxy.
@@ -17,9 +17,10 @@ It supports a hub-and-spoke topology: a host token can request host operations, 
 - Timed leases are task-, target-, time-, and count-bound, and accept only an allowlist of read-only commands.
 - Shells, interpreters, relative executables, and writable/non-root-owned host executables are rejected.
 - Scoped spoke tokens cannot authorize host operations.
+- Guest approvals bind the target alias, guest type, and VMID into the signed request.
 - Accepted, completed, rejected, and leased operations are written to an append-only JSON-lines audit file (subject to host filesystem protections).
 
-The broker and executor run on the trusted host. A spoke submits requests over HTTPS using its own bearer token; the host executor uses `pct exec` for an explicitly configured LXC ID.
+The broker and executor run on the trusted host. A spoke submits requests over HTTPS using its own bearer token. For an explicitly configured guest, the host executor uses `pct exec` for LXC or `qm guest exec` through the QEMU Guest Agent for a Linux VM.
 
 ## Development
 
@@ -82,7 +83,7 @@ sandboxing for the target environment before granting root access.
 
 ## Operations
 
-The executor includes typed handlers for package refresh/upgrades, systemd service control, fstab mounts, Proxmox guest lifecycle/snapshots/backups, LXC bind mounts, and exact root command arrays. Policy validation happens before the command is constructed; requests never contain shell syntax.
+The executor includes typed handlers for package refresh/upgrades, systemd service control, fstab mounts, Proxmox guest lifecycle/snapshots/backups, LXC bind mounts, and exact root command arrays inside configured LXC or Linux QEMU guests. Policy validation happens before the command is constructed; requests never contain shell syntax.
 
 ## Repository hygiene
 

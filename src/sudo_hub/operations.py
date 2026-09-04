@@ -13,6 +13,7 @@ class PolicyError(ValueError):
 
 
 VMID = re.compile(r"^[1-9][0-9]{2,8}$")
+TARGET_NAME = re.compile(r"^[a-z0-9][a-z0-9.-]{0,62}$")
 UNIT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@:-]{0,127}(?:\.service)?$")
 SNAPSHOT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 STORAGE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
@@ -30,6 +31,8 @@ LEASE_SAFE_EXECUTABLES = {
 }
 SYSTEMCTL_READ_ACTIONS = {"status", "show", "is-active", "is-enabled", "list-units", "list-unit-files"}
 PCT_READ_ACTIONS = {"list", "status", "config"}
+GUEST_ADMIN_OPERATIONS = frozenset({"guest.admin.command", "container.admin.command"})
+GUEST_LEASE_OPERATIONS = frozenset({"guest.command.lease", "container.command.lease"})
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,42 @@ class Plan:
     summary: str
     destructive: bool = False
     timeout: int = 300
+    result_format: str = "process"
+
+
+@dataclass(frozen=True)
+class GuestTarget:
+    kind: str
+    vmid: str
+
+
+def parse_guest_target(value: str) -> GuestTarget:
+    """Parse KIND:VMID, accepting a bare VMID as a legacy LXC target."""
+    kind, separator, vmid = value.partition(":")
+    if not separator:
+        kind, vmid = "lxc", value
+    if kind not in {"lxc", "qemu"} or not VMID.fullmatch(vmid):
+        raise PolicyError("guest target must be lxc:VMID or qemu:VMID")
+    return GuestTarget(kind, vmid)
+
+
+def parse_guest_targets(guest_items: list[str], container_items: list[str] | None = None) -> dict[str, str]:
+    """Parse CLI NAME=TYPE:VMID mappings and legacy NAME=VMID LXC mappings."""
+    targets: dict[str, str] = {}
+    entries = [(value, False) for value in guest_items]
+    entries.extend((value, True) for value in (container_items or []))
+    for item, legacy_lxc in entries:
+        name, separator, value = item.partition("=")
+        if not separator or not TARGET_NAME.fullmatch(name):
+            expected = "NAME=VMID" if legacy_lxc else "NAME=TYPE:VMID"
+            raise PolicyError(f"guest target must be {expected}")
+        if legacy_lxc:
+            value = f"lxc:{value}"
+        guest = parse_guest_target(value)
+        if name in targets:
+            raise PolicyError(f"guest target is configured more than once: {name}")
+        targets[name] = f"{guest.kind}:{guest.vmid}"
+    return targets
 
 
 def lease_command_is_read_only(parameters: dict[str, Any]) -> bool:
@@ -126,17 +165,33 @@ def build_target_plan(
     p: dict[str, Any],
     *,
     target: str = "host",
+    guest_targets: dict[str, str] | None = None,
     container_targets: dict[str, str] | None = None,
     fstab: Path = Path("/etc/fstab"),
     root_uid: int = 0,
 ) -> Plan:
-    if operation == "container.admin.command":
-        vmid = (container_targets or {}).get(target)
-        if vmid is None or not VMID.fullmatch(vmid):
-            raise PolicyError("target is not an allowed container")
+    # container_targets is the pre-VM API name. Keep accepting it so callers
+    # and existing NAME=VMID deployments continue to mean an LXC guest.
+    targets = guest_targets if guest_targets is not None else container_targets
+    if operation in GUEST_ADMIN_OPERATIONS:
+        raw_target = (targets or {}).get(target)
+        if raw_target is None:
+            raise PolicyError("target is not an allowed guest")
+        guest = parse_guest_target(raw_target)
         argv, timeout = _admin_argv(p, root_uid=root_uid, inspect_executable=False)
-        command = ("/usr/sbin/pct", "exec", vmid, "--", *argv)
-        return Plan(command, f"Run exact root command in {target} (LXC {vmid}): " + " ".join(argv), destructive=True, timeout=timeout)
+        if guest.kind == "lxc":
+            command = ("/usr/sbin/pct", "exec", guest.vmid, "--", *argv)
+            summary = f"Run exact root command in {target} (LXC {guest.vmid}): " + " ".join(argv)
+            return Plan(command, summary, destructive=True, timeout=timeout)
+        command = (
+            "/usr/sbin/qm", "guest", "exec", guest.vmid,
+            "--timeout", str(timeout), "--", *argv,
+        )
+        summary = f"Run exact root command in {target} (QEMU VM {guest.vmid}): " + " ".join(argv)
+        return Plan(
+            command, summary, destructive=True, timeout=timeout,
+            result_format="qemu-guest-agent",
+        )
     if target != "host":
         raise PolicyError("operation is not allowed for this target")
     if operation == "admin.command":
