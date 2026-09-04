@@ -1,5 +1,5 @@
 include LICENSE
 include SECURITY.md
 include uv.lock
-recursive-include deploy *.example *.md *.service *.sh
+recursive-include deploy *.example *.md *.service *.sh *.svg
 include deploy/sudo-hub-spoke-request
