@@ -26,15 +26,14 @@ The broker and executor run on the trusted host. A spoke submits requests over H
 Requires Python 3.11 or newer.
 
 ```console
-python3 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
-.venv/bin/pytest -q
+uv sync --frozen --extra dev
+uv run --frozen pytest -q
 ```
 
 For a local, non-root demo:
 
 ```console
-.venv/bin/codex-approval-server \
+.venv/bin/sudo-hub-server \
   --client-token development-token \
   --origin http://localhost:8787 \
   --rp-id localhost
@@ -43,37 +42,43 @@ For a local, non-root demo:
 Open `http://localhost:8787`, enroll a passkey using the one-time code printed by the server, then submit the built-in safe demo operation:
 
 ```console
-.venv/bin/codex-approval-request \
+.venv/bin/sudo-hub-request \
   --token development-token \
   demo.echo '{"message":"hello"}'
 ```
 
-## Production outline
+## Deployment
 
-1. Create a locked-down `sudo-hub` system user, install the package into `/opt/sudo-hub/.venv`, and keep broker state in `/var/lib/sudo-hub` with mode `0700`.
-2. Serve the broker through HTTPS. WebAuthn requires the configured `--origin` and `--rp-id` to exactly match the browser-visible relying party.
-3. Create separate random bearer-token files for the host and every spoke. Never put tokens on command lines, in Git, or in unit files.
-4. Copy the enrolled `credential.json` to `/etc/codex-approval/credential.json` with owner `root:root` and mode `0600` so the executor can verify approvals independently.
-5. Configure the root executor with the `sudo-hub` user's Unix UID and explicit `NAME=VMID` spoke mappings. The broker and allowed socket peer must be the same UID.
-6. Review and adapt `src/codex_approval/operations.py`; its Proxmox and filesystem policies are examples, not a universal safe policy.
-7. Install and customize the example systemd units in `deploy/`.
-
-Copy the tracked example to the ignored local deployment file and edit it:
+The repository includes repeatable installers for the trusted hub and for
+request-only spoke systems. On the hub:
 
 ```console
-cp deploy/sudo-hub.env.example deploy/sudo-hub.env
-$EDITOR deploy/sudo-hub.env
+cp deploy/hub.env.example deploy/hub.env
+$EDITOR deploy/hub.env
+sudo ./deploy/install-hub.sh
 ```
 
-Both systemd units read the installed copy at `/etc/sudo-hub/sudo-hub.env`. Install it without making it world-readable:
+Open the HTTPS approval UI and enroll a passkey, then make the independent
+root-owned credential copy and start the executor:
 
 ```console
-sudo install -o root -g root -m 0600 deploy/sudo-hub.env /etc/sudo-hub/sudo-hub.env
+sudo sudo-hub-install-credential
 ```
 
-The file holds the browser origin/RP ID, Web Push contact, allowed requester UID, spoke name, spoke token-file mapping, and Proxmox VMID mapping. It must not contain bearer-token values; those stay in separate mode-`0600` runtime files.
+Transfer the generated scoped token to the spoke over a secure channel, then on
+the spoke:
 
-The supplied units are templates. Their network dependencies, paths, user model, reverse proxy, firewall rules, and Proxmox mappings must be reviewed for the deployment host.
+```console
+cp deploy/spoke.env.example deploy/spoke.env
+$EDITOR deploy/spoke.env
+sudo ./deploy/install-spoke.sh deploy/spoke.env /secure/path/client-token-spoke
+```
+
+See [`deploy/README.md`](deploy/README.md) for the full sequence. The installers
+use isolated virtual environments, install all Python dependencies, protect
+configuration and bearer tokens, and can be rerun to upgrade a checkout.
+Review the operation policy, reverse proxy, firewall, TLS origin, and systemd
+sandboxing for the target environment before granting root access.
 
 ## Operations
 
@@ -85,4 +90,4 @@ Runtime state is intentionally ignored. In particular, never commit bearer token
 
 ## License
 
-No license has been granted yet. All rights are reserved unless the repository owner adds a license.
+Sudo Hub is licensed under the [MIT License](LICENSE).

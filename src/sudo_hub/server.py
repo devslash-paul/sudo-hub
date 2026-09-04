@@ -157,7 +157,7 @@ class Broker:
             return
         from pywebpush import WebPushException, webpush
         payload = json.dumps({
-            "title": "Codex approval requested",
+            "title": "Sudo Hub approval requested",
             "body": f"{request.operation} on {request.target}",
             "url": self.origin + "/?request=" + request.id,
             "tag": request.id,
@@ -226,7 +226,7 @@ class Broker:
             raise ValueError("executor request is too large")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(socket_timeout)
-            client.connect("/run/codex-approval/executor.sock")
+            client.connect("/run/sudo-hub/executor.sock")
             client.sendall(encoded)
             response = b""
             while not response.endswith(b"\n") and len(response) <= 1_048_576:
@@ -272,7 +272,7 @@ class Broker:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "CodexApproval/0.1"
+    server_version = "SudoHub/0.1"
 
     @property
     def broker(self) -> Broker:
@@ -373,7 +373,7 @@ class Handler(BaseHTTPRequestHandler):
                     request = Request(
                         operation=operation,
                         parameters=body.get("parameters", {}),
-                        requester=body.get("requester", "codex"),
+                        requester=body.get("requester", "sudo-hub-client"),
                         host=body.get("host", "unknown"),
                         target=scope.target,
                         task_id=body.get("taskId"),
@@ -408,7 +408,7 @@ class Handler(BaseHTTPRequestHandler):
                     ceremony_id, challenge = self.broker.challenge("register")
                     self.send_json(200, {
                         "ceremonyId": ceremony_id,
-                        "challenge": b64e(challenge), "rp": {"name": "Codex Approval", "id": self.broker.rp_id},
+                        "challenge": b64e(challenge), "rp": {"name": "Sudo Hub", "id": self.broker.rp_id},
                         "user": {"id": b64e(secrets.token_bytes(16)), "name": "owner", "displayName": "Device owner"},
                         "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
                         "authenticatorSelection": {"residentKey": "preferred", "userVerification": "required"},

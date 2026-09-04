@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev
+      - name: Run tests
+        run: uv run --frozen pytest -q
+      - name: Validate deployment shell scripts
+        run: sh -n deploy/*.sh deploy/sudo-hub-spoke-request
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - name: Build wheel and source distribution
+        run: uv build
+      - name: Smoke-test wheel
+        run: |
+          uv venv /tmp/sudo-hub-wheel
+          uv pip install --python /tmp/sudo-hub-wheel/bin/python dist/*.whl
+          /tmp/sudo-hub-wheel/bin/sudo-hub-server --help
+          /tmp/sudo-hub-wheel/bin/sudo-hub-request --help
+          /tmp/sudo-hub-wheel/bin/sudo-hub-executor --help
+      - name: Verify deployment files are packaged
+        run: |
+          unzip -l dist/*.whl | grep 'share/sudo-hub/deploy/install-hub.sh'
+          tar -tzf dist/*.tar.gz | grep '/deploy/install-spoke.sh'
+          tar -tzf dist/*.tar.gz | grep '/uv.lock'

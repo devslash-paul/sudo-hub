@@ -152,7 +152,7 @@ def build_target_plan(
         unit, action = p.get("unit"), _choice(p.get("action"), "action", {"start", "stop", "restart", "reload"})
         if not isinstance(unit, str) or not UNIT.fullmatch(unit):
             raise PolicyError("invalid systemd unit name")
-        if unit.removesuffix(".service") in {"codex-approval-executor", "tailscaled"} and action == "stop":
+        if unit.removesuffix(".service") in {"sudo-hub-executor", "tailscaled"} and action == "stop":
             raise PolicyError("policy prevents stopping the authorization path")
         return Plan(("/usr/bin/systemctl", action, unit), f"{action.title()} system service {unit}", destructive=action in {"stop", "restart"})
     if operation == "maintenance.mount.fstab":

@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from codex_approval.operations import PolicyError, build_plan, build_target_plan
+from sudo_hub.operations import PolicyError, build_plan, build_target_plan
 
 
 def test_lifecycle_is_structured():
@@ -29,9 +29,9 @@ def test_mount_requires_fstab_entry(tmp_path: Path):
 
 
 def test_generic_admin_command_accepts_exact_system_argv():
-    owner = os.stat("/usr/bin/systemctl").st_uid
-    plan = build_plan("admin.command", {"argv":["/usr/bin/systemctl", "restart", "pveproxy.service"]}, root_uid=owner)
-    assert plan.argv == ("/usr/bin/systemctl", "restart", "pveproxy.service")
+    owner = os.stat("/usr/bin/id").st_uid
+    plan = build_plan("admin.command", {"argv":["/usr/bin/id"]}, root_uid=owner)
+    assert plan.argv == ("/usr/bin/id",)
     assert plan.destructive
 
 

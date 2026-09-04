@@ -4,8 +4,9 @@ import argparse
 import hashlib
 import json
 import os
-import secrets
+import pwd
 import re
+import secrets
 import socket
 import struct
 import subprocess
@@ -252,15 +253,17 @@ class Executor:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--socket", type=Path, default=Path("/run/codex-approval/executor.sock"))
-    parser.add_argument("--credential", type=Path, default=Path("/etc/codex-approval/credential.json"))
-    parser.add_argument("--audit", type=Path, default=Path("/var/log/codex-approval.jsonl"))
+    parser.add_argument("--socket", type=Path, default=Path("/run/sudo-hub/executor.sock"))
+    parser.add_argument("--credential", type=Path, default=Path("/etc/sudo-hub/credential.json"))
+    parser.add_argument("--audit", type=Path, default=Path("/var/log/sudo-hub/audit.jsonl"))
     # RuntimeDirectory is removed when this service restarts. Keep short-lived
     # lease state under /var/lib so an in-window lease survives that restart.
-    parser.add_argument("--lease-file", type=Path, default=Path("/var/lib/codex-approval/active-leases.json"))
+    parser.add_argument("--lease-file", type=Path, default=Path("/var/lib/sudo-hub-executor/active-leases.json"))
     parser.add_argument("--origin", default="http://localhost:8787")
     parser.add_argument("--rp-id", default="localhost")
-    parser.add_argument("--allowed-uid", type=int, default=1000)
+    peer = parser.add_mutually_exclusive_group()
+    peer.add_argument("--allowed-user", default="sudo-hub")
+    peer.add_argument("--allowed-uid", type=int)
     parser.add_argument("--container-target", action="append", default=[], metavar="NAME=VMID")
     args = parser.parse_args()
     container_targets = {}
@@ -269,20 +272,24 @@ def main():
         if not separator or not name or not vmid:
             raise SystemExit("--container-target must be NAME=VMID")
         container_targets[name] = vmid
-    executor = Executor(args.credential, args.origin, args.rp_id, args.audit, args.allowed_uid, container_targets, lease_file=args.lease_file)
+    try:
+        allowed_uid = args.allowed_uid if args.allowed_uid is not None else pwd.getpwnam(args.allowed_user).pw_uid
+    except KeyError as exc:
+        raise SystemExit(f"allowed user does not exist: {args.allowed_user}") from exc
+    executor = Executor(args.credential, args.origin, args.rp_id, args.audit, allowed_uid, container_targets, lease_file=args.lease_file)
     args.socket.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
     os.chmod(args.socket.parent, 0o755)
     args.socket.unlink(missing_ok=True)
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
         server.bind(str(args.socket))
-        os.chown(args.socket, args.allowed_uid, -1)
+        os.chown(args.socket, allowed_uid, -1)
         os.chmod(args.socket, 0o600)
         server.listen(16)
         while True:
             connection, _ = server.accept()
             with connection:
                 _, uid, _ = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))
-                if uid != args.allowed_uid:
+                if uid != allowed_uid:
                     connection.sendall(b'{"ok":false,"error":"peer is not allowed"}\n')
                     continue
                 data = b""

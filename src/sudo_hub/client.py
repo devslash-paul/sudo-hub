@@ -22,7 +22,7 @@ def main():
     token = parser.add_mutually_exclusive_group(required=True)
     token.add_argument("--token")
     token.add_argument("--token-file")
-    parser.add_argument("--requester", default="codex")
+    parser.add_argument("--requester", default="sudo-hub-client")
     parser.add_argument("--task-id")
     parser.add_argument("--lease", action="store_true", help="request a short container command lease")
     parser.add_argument("--duration", type=int, default=60)

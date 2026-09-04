@@ -1,4 +1,4 @@
-from codex_approval.model import Request, canonical_json
+from sudo_hub.model import Request, canonical_json
 
 
 def test_canonical_json_is_stable():
@@ -6,12 +6,12 @@ def test_canonical_json_is_stable():
 
 
 def test_request_digest_changes_with_parameters():
-    first = Request("demo.echo", {"message": "one"}, "codex", "host", id="same", created_at=1)
-    second = Request("demo.echo", {"message": "two"}, "codex", "host", id="same", created_at=1)
+    first = Request("demo.echo", {"message": "one"}, "agent", "host", id="same", created_at=1)
+    second = Request("demo.echo", {"message": "two"}, "agent", "host", id="same", created_at=1)
     assert first.digest != second.digest
 
 
 def test_request_digest_is_bound_to_target():
-    host = Request("admin.command", {"argv":["/usr/bin/id"]}, "codex", "host", target="host", id="same", created_at=1)
-    container = Request("admin.command", {"argv":["/usr/bin/id"]}, "codex", "host", target="spoke", id="same", created_at=1)
+    host = Request("admin.command", {"argv":["/usr/bin/id"]}, "agent", "host", target="host", id="same", created_at=1)
+    container = Request("admin.command", {"argv":["/usr/bin/id"]}, "agent", "host", target="spoke", id="same", created_at=1)
     assert host.digest != container.digest
