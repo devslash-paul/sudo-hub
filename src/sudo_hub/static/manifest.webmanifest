@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Codex Approval",
+  "name": "Sudo Hub",
   "short_name": "Approve",
-  "description": "Face ID approval for privileged Codex operations",
+  "description": "Face ID approval for privileged operations",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

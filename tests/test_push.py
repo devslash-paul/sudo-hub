@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from codex_approval.server import Broker
+from sudo_hub.server import Broker
 
 
 def test_vapid_key_is_persisted_and_public_key_is_uncompressed(tmp_path: Path):

@@ -10,8 +10,8 @@ Group=sudo-hub
 WorkingDirectory=/opt/sudo-hub
 Environment=PYTHONPATH=/opt/sudo-hub/src
 Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=/etc/sudo-hub/sudo-hub.env
-ExecStart=/opt/sudo-hub/.venv/bin/python -m codex_approval.server --listen 127.0.0.1 --port 8787 --origin ${APPROVAL_ORIGIN} --rp-id ${APPROVAL_RP_ID} --vapid-subject ${VAPID_SUBJECT} --data-dir /var/lib/sudo-hub --client-token-file /var/lib/sudo-hub/client-token --scoped-client-token-file ${SPOKE_TOKEN_SPEC}
+EnvironmentFile=/etc/sudo-hub/hub.env
+ExecStart=/opt/sudo-hub/.venv/bin/sudo-hub-server --listen 127.0.0.1 --port 8787 --origin ${APPROVAL_ORIGIN} --rp-id ${APPROVAL_RP_ID} --vapid-subject ${VAPID_SUBJECT} --data-dir /var/lib/sudo-hub --client-token-file /var/lib/sudo-hub/client-token --scoped-client-token-file ${SPOKE_TOKEN_SPEC}
 Restart=on-failure
 RestartSec=2
 StateDirectory=sudo-hub

@@ -4,7 +4,7 @@ import struct
 
 import pytest
 
-from codex_approval.webauthn import b64e, decode_cbor, parse_authenticator_data, verify_client_data
+from sudo_hub.webauthn import b64e, decode_cbor, parse_authenticator_data, verify_client_data
 
 
 def test_decode_small_cbor_map():

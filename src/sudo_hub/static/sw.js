@@ -1,5 +1,5 @@
 self.addEventListener('push', event => {
-  const value = event.data ? event.data.json() : {title:'Codex approval requested', body:'Open the approval app'};
+  const value = event.data ? event.data.json() : {title:'Sudo Hub requested', body:'Open the approval app'};
   event.waitUntil(Promise.all([
     self.registration.showNotification(value.title, {body:value.body, tag:value.tag, data:{url:value.url}}),
     self.registration.navigationPreload ? Promise.resolve() : Promise.resolve()

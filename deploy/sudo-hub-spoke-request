@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+config=/etc/sudo-hub/spoke.env
+if [ ! -r "$config" ]; then
+    echo "cannot read $config; the caller must belong to the sudo-hub-spoke group" >&2
+    exit 1
+fi
+
+# The installed file is root-owned and writable only by root.
+. "$config"
+: "${SUDO_HUB_URL:?missing SUDO_HUB_URL in $config}"
+: "${SUDO_HUB_TOKEN_FILE:?missing SUDO_HUB_TOKEN_FILE in $config}"
+
+exec /opt/sudo-hub-spoke/.venv/bin/sudo-hub-request \
+    --url "$SUDO_HUB_URL" \
+    --token-file "$SUDO_HUB_TOKEN_FILE" \
+    --requester "${SUDO_HUB_REQUESTER:-spoke}" \
+    "$@"

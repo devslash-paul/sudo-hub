@@ -3,16 +3,24 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codex-sudo-approval"
+name = "sudo-hub"
 version = "0.1.0"
 description = "Phone-first, passkey-authorized privileged operation broker"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = ["cryptography>=43", "pywebpush>=2.0.3"]
 
+[project.urls]
+Homepage = "https://github.com/devslash-paul/sudo-hub"
+Repository = "https://github.com/devslash-paul/sudo-hub"
+Issues = "https://github.com/devslash-paul/sudo-hub/issues"
+
 [project.scripts]
-codex-approval-server = "codex_approval.server:main"
-codex-approval-request = "codex_approval.client:main"
+sudo-hub-server = "sudo_hub.server:main"
+sudo-hub-request = "sudo_hub.client:main"
+sudo-hub-executor = "sudo_hub.executor:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
@@ -21,4 +29,13 @@ pythonpath = ["src"]
 dev = ["pytest>=8"]
 
 [tool.setuptools.package-data]
-codex_approval = ["static/*"]
+sudo_hub = ["static/*"]
+
+[tool.setuptools.data-files]
+"share/sudo-hub/deploy" = [
+  "deploy/README.md",
+  "deploy/*.service",
+  "deploy/*.sh",
+  "deploy/*.example",
+  "deploy/sudo-hub-spoke-request",
+]
