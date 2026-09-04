@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title description">
+  <title id="title">Sudo Hub hub-and-spoke deployment architecture</title>
+  <desc id="description">An owner approves requests from a phone. Spoke systems send scoped requests over HTTPS to an unprivileged broker on the Proxmox hub. The broker passes signed approvals over a Unix socket to a root executor, which performs host operations or explicitly mapped LXC operations.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <style>
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #172033; }
+      .title { font-size: 30px; font-weight: 750; }
+      .subtitle { font-size: 15px; fill: #526078; }
+      .boundary-title { font-size: 20px; font-weight: 700; }
+      .box-title { font-size: 18px; font-weight: 700; }
+      .body { font-size: 14px; }
+      .small { font-size: 12px; fill: #526078; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+      .flow { fill: none; stroke: #2563eb; stroke-width: 3; marker-end: url(#arrow); }
+      .flow-dashed { fill: none; stroke: #2563eb; stroke-width: 2.5; stroke-dasharray: 7 6; marker-end: url(#arrow); }
+      .flow-label { font-size: 12px; font-weight: 650; fill: #334155; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="760" rx="16" fill="#f8fafc"/>
+  <text class="title" x="42" y="52">Sudo Hub deployment architecture</text>
+  <text class="subtitle" x="42" y="78">The broker requests approval; only the independently verifying executor runs privileged commands.</text>
+
+  <!-- Owner device -->
+  <g filter="url(#shadow)">
+    <rect x="42" y="118" width="292" height="178" rx="18" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+    <rect x="65" y="146" width="64" height="112" rx="11" fill="#ffffff" stroke="#7c3aed" stroke-width="2"/>
+    <circle cx="97" cy="239" r="4" fill="#7c3aed"/>
+    <path d="M82 184a15 15 0 0 1 30 0v8H82z" fill="#ddd6fe" stroke="#7c3aed"/>
+    <path d="M88 192v12h18v-12" fill="#ffffff" stroke="#7c3aed" stroke-width="2"/>
+    <text class="box-title" x="151" y="158">Owner device</text>
+    <text class="body" x="151" y="184">Approval UI</text>
+    <text class="body" x="151" y="207">WebAuthn passkey</text>
+    <text class="body" x="151" y="230">Face ID / device unlock</text>
+    <rect x="151" y="247" width="154" height="27" rx="7" fill="#ede9fe"/>
+    <text class="mono" x="163" y="265">browser / PWA</text>
+  </g>
+
+  <!-- Spoke system -->
+  <g filter="url(#shadow)">
+    <rect x="42" y="414" width="340" height="242" rx="18" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+    <text class="box-title" x="67" y="450">Spoke system(s)</text>
+    <rect x="258" y="429" width="99" height="28" rx="14" fill="#dbeafe"/>
+    <text class="small" x="274" y="448">request only</text>
+    <text class="body" x="67" y="485">Automation user or agent</text>
+    <text class="mono" x="67" y="515">sudo-hub-spoke-request</text>
+    <text class="body" x="67" y="546">Scoped bearer token</text>
+    <text class="small" x="67" y="569">Cannot authorize host operations</text>
+    <line x1="67" y1="590" x2="357" y2="590" stroke="#bfdbfe"/>
+    <text class="small" x="67" y="615">Installed on every spoke with</text>
+    <text class="mono" x="67" y="638">deploy/install-spoke.sh</text>
+  </g>
+
+  <!-- Hub trust boundary -->
+  <rect x="470" y="106" width="686" height="596" rx="24" fill="#ffffff" stroke="#0f766e" stroke-width="3" stroke-dasharray="10 7"/>
+  <text class="boundary-title" x="500" y="143">Trusted Proxmox hub</text>
+  <rect x="918" y="120" width="211" height="30" rx="15" fill="#ccfbf1"/>
+  <text class="mono" x="937" y="140">deploy/install-hub.sh</text>
+
+  <!-- Broker -->
+  <g filter="url(#shadow)">
+    <rect x="510" y="181" width="278" height="230" rx="17" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+    <text class="box-title" x="535" y="217">Web broker</text>
+    <rect x="670" y="196" width="93" height="28" rx="14" fill="#d1fae5"/>
+    <text class="small" x="686" y="215">unprivileged</text>
+    <text class="mono" x="535" y="251">sudo-hub.service</text>
+    <text class="body" x="535" y="283">• Receives typed requests</text>
+    <text class="body" x="535" y="308">• Displays approval details</text>
+    <text class="body" x="535" y="333">• Issues WebAuthn challenge</text>
+    <text class="body" x="535" y="358">• Cannot execute commands</text>
+    <text class="small" x="535" y="391">State: /var/lib/sudo-hub</text>
+  </g>
+
+  <!-- Executor -->
+  <g filter="url(#shadow)">
+    <rect x="846" y="181" width="270" height="230" rx="17" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+    <text class="box-title" x="871" y="217">Root executor</text>
+    <rect x="1012" y="196" width="79" height="28" rx="14" fill="#ffedd5"/>
+    <text class="small" x="1035" y="215">root</text>
+    <text class="mono" x="871" y="251">sudo-hub-executor.service</text>
+    <text class="body" x="871" y="283">• Re-verifies assertion</text>
+    <text class="body" x="871" y="308">• Checks request digest</text>
+    <text class="body" x="871" y="333">• Builds policy argv</text>
+    <text class="body" x="871" y="358">• Writes audit log</text>
+    <text class="small" x="871" y="391">Credential: /etc/sudo-hub</text>
+  </g>
+
+  <!-- Targets -->
+  <g filter="url(#shadow)">
+    <rect x="510" y="520" width="278" height="132" rx="16" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+    <text class="box-title" x="535" y="555">Hub host operations</text>
+    <text class="body" x="535" y="585">apt • systemd • mounts</text>
+    <text class="body" x="535" y="610">Proxmox VM/LXC lifecycle</text>
+    <text class="small" x="535" y="635">Typed policy handlers</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="846" y="520" width="270" height="132" rx="16" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+    <text class="box-title" x="871" y="555">Mapped LXC target</text>
+    <text class="mono" x="871" y="586">pct exec VMID -- argv…</text>
+    <text class="body" x="871" y="612">Exact configured spoke → VMID</text>
+    <text class="small" x="871" y="636">Command runs inside container</text>
+  </g>
+
+  <!-- Data flows -->
+  <path d="M334 202 C397 202 429 244 510 244" fill="none" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="350" y="137" width="138" height="42" rx="8" fill="#f8fafc"/>
+  <text class="flow-label" x="360" y="154">HTTPS approval UI</text>
+  <text class="small" x="360" y="171">WebAuthn assertion</text>
+
+  <path d="M382 518 C431 518 440 335 510 335" fill="none" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="389" y="371" width="128" height="43" rx="8" fill="#f8fafc"/>
+  <text class="flow-label" x="399" y="388">HTTPS request</text>
+  <text class="small" x="399" y="405">scoped token</text>
+
+  <path d="M788 296 L846 296" fill="none" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="778" y="256" width="80" height="31" rx="7" fill="#ffffff"/>
+  <text class="flow-label" x="788" y="276">Unix socket</text>
+
+  <path d="M963 411 C963 467 726 467 682 520" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+  <text class="flow-label" x="713" y="458">policy-built host command</text>
+  <path d="M981 411 L981 520" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+  <text class="flow-label" x="993" y="472">pct exec</text>
+
+  <!-- Credential handoff note -->
+  <rect x="500" y="670" width="629" height="22" rx="6" fill="#fef3c7"/>
+  <text class="small" x="514" y="686">After enrollment: install-hub-credential.sh creates the root-owned credential copy.</text>
+</svg>

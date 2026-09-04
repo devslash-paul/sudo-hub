@@ -5,6 +5,8 @@ Proxmox host. A spoke only installs the request client and a scoped bearer
 token; privileged container commands still execute through the hub's root
 executor.
 
+![Sudo Hub hub-and-spoke deployment architecture](hub-spoke-architecture.svg)
+
 ## Hub
 
 1. Copy `hub.env.example` to the ignored `hub.env` and set the public origin,

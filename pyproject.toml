@@ -36,6 +36,7 @@ sudo_hub = ["static/*"]
   "deploy/README.md",
   "deploy/*.service",
   "deploy/*.sh",
+  "deploy/*.svg",
   "deploy/*.example",
   "deploy/sudo-hub-spoke-request",
 ]
